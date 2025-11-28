@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import stopIcon from "./assets/stop.svg";
 import percentageIcon from "./assets/percentage.svg";
+import dotsIcon from "./assets/dots.svg";
+import checkedIconImg from "./assets/checked.svg";
+import wipIconImg from "./assets/work-in-progress.svg";
+import dryCleanIcon from "./assets/dry-clean.svg";
+import menuIcon from "./assets/menu-bar.svg";
+import trashIconImg from "./assets/trash-can.svg";
+import plusSvgImg from "./assets/plus.svg";
+import reactLogoImg from "./assets/react.svg";
 
 // --- Firebase Imports (required for persistent, real-time storage) ---
 import { initializeApp } from "firebase/app";
@@ -227,37 +235,72 @@ const TaskCard = React.memo(
         id={`task-${task.id}`}
       >
         <div className="flex-row">
-          <h3 className="task-card-title">{task.title}</h3>
-          {/* Drag Handle */}
-          <button className="icon-button drag-handle" title="Drag to move task">
-            <GripVerticalIcon size="1.25rem" className="text-gray-400" />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img
+              src={dotsIcon}
+              alt="drag"
+              className="drag-handle-img"
+              draggable
+              title="Drag"
+            />
+            <div>
+              <h3 className="task-card-title">{task.title}</h3>
+              {task.description && (
+                <div className="task-card-desc">{task.description}</div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {task.isTech && (
+              <img
+                src={reactLogoImg}
+                alt="tech"
+                className="react-badge"
+                title="Tech task"
+              />
+            )}
+            <div
+              className={`priority-pill ${
+                task.priority === "low"
+                  ? "priority-low"
+                  : task.priority === "medium"
+                  ? "priority-medium"
+                  : task.priority === "high"
+                  ? "priority-high"
+                  : ""
+              }`}
+            >
+              {(task.priority || "Low").toUpperCase()}
+            </div>
+          </div>
         </div>
 
         <div className="task-status-bar">
           {/* Status Icon */}
-          <div
-            className="flex items-center"
-            style={{
-              color: isDone ? "#10b981" : isProgress ? "#3b82f6" : "#f87171",
-            }}
-          >
-            {isDone && <CheckedIcon size="1rem" />}
-            {isProgress && <WipIcon size="1rem" />}
-            {!isProgress && !isDone && <CircleIcon size="1rem" />}
+          <div className="flex items-center" style={{ gap: 8 }}>
+            {isDone && (
+              <img src={checkedIconImg} alt="done" className="status-icon" />
+            )}
+            {isProgress && !isDone && (
+              <img src={wipIconImg} alt="wip" className="status-icon" />
+            )}
+            {!isProgress && !isDone && (
+              <img src={dryCleanIcon} alt="todo" className="status-icon" />
+            )}
           </div>
 
-          {/* Progress Slider (Only for In Progress) */}
+          {/* Progress Slider (Only for In Progress and no subtasks) */}
           <div className="progress-slider-container">
             {isProgress && !hasSubtasks ? (
               <input
                 type="range"
-                min="1" // Start at 1 to prevent automatic status change to 'todo'
-                max="99" // End at 99 to prevent automatic status change to 'done'
+                min="1"
+                max="99"
                 value={progressPercentage}
                 onChange={handleUpdateProgress}
                 style={{
-                  background: `linear-gradient(to right, ${progressColor} ${progressPercentage}%, #e0e7ff ${progressPercentage}%)`,
+                  background: `linear-gradient(to right, ${progressColor} ${progressPercentage}%, rgba(255,255,255,0.06) ${progressPercentage}%)`,
                 }}
               />
             ) : (
@@ -280,8 +323,8 @@ const TaskCard = React.memo(
           </span>
         </div>
 
-        {/* Delete Button */}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {/* Actions: Expand / Delete / Menu */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
             className="icon-button"
             onClick={toggleExpand}
@@ -294,15 +337,16 @@ const TaskCard = React.memo(
             )}
           </button>
 
+          <button className="icon-button" onClick={() => {}} title="More">
+            <img src={menuIcon} alt="menu" className="action-img" />
+          </button>
+
           <button
             className="icon-button"
             onClick={handleDeleteClick}
             title="Delete Task"
           >
-            <TrashIcon
-              size="1rem"
-              className="text-red-500 hover:text-red-700"
-            />
+            <img src={trashIconImg} alt="delete" className="action-img" />
           </button>
         </div>
 
@@ -314,14 +358,21 @@ const TaskCard = React.memo(
                 placeholder="Add subtask title"
                 value={newSubtaskTitle}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                style={{ flex: 1 }}
+                style={{
+                  flex: 1,
+                  padding: 8,
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.04)",
+                  background: "transparent",
+                  color: "inherit",
+                }}
               />
               <button
                 onClick={addSubtask}
                 className="icon-button"
                 title="Add subtask"
               >
-                <PlusIcon size="1rem" />
+                <img src={plusSvgImg} alt="add" className="action-img" />
               </button>
             </div>
 
@@ -338,7 +389,12 @@ const TaskCard = React.memo(
                   }}
                 >
                   <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flex: 1,
+                    }}
                   >
                     <input
                       type="checkbox"
@@ -365,6 +421,12 @@ const TaskCard = React.memo(
             </div>
           </div>
         )}
+        {/* Subtask progress bar (visual) */}
+        <div style={{ marginTop: 6 }}>
+          <div className="subtask-progress">
+            <div className="fill" style={{ width: `${progressPercentage}%` }} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -516,6 +578,14 @@ export const App = () => {
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("taskId", taskId);
     e.currentTarget.classList.add("is-dragging");
+  };
+
+  const floatingAdd = () => {
+    const col = prompt(
+      "Enter column (todo, in-progress, done) or leave blank for To Do:"
+    );
+    const columnId = col && col.trim() ? col.trim() : "todo";
+    addTask(columnId);
   };
 
   const handleDragOver = (e) => {
@@ -711,7 +781,7 @@ export const App = () => {
                 onClick={() => addTask(column.id)}
                 title={`Add task to ${column.title}`}
               >
-                <PlusIcon size="1.25rem" />
+                <img src={plusSvgImg} alt="add" className="action-img" />
               </button>
             </div>
 
@@ -738,6 +808,10 @@ export const App = () => {
           </div>
         ))}
       </main>
+      {/* Floating Add Task Button */}
+      <button className="floating-add" onClick={floatingAdd} title="Add Task">
+        <img src={plusSvgImg} alt="add" />
+      </button>
     </div>
   );
 };
