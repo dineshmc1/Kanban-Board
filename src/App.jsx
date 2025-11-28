@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import stopIcon from "./assets/stop.svg";
+import percentageIcon from "./assets/percentage.svg";
 
 // --- Firebase Imports (required for persistent, real-time storage) ---
 import { initializeApp } from "firebase/app";
@@ -118,11 +120,26 @@ const TaskCard = React.memo(
     onDragStart,
     handleProgressChange,
     handleDeleteTask,
+    updateTask,
   }) => {
     const isProgress = task.status === "in-progress";
     const isDone = task.status === "done";
+    // If task has subtasks, compute progress from subtasks
+    const hasSubtasks =
+      Array.isArray(task.subtasks) && task.subtasks.length > 0;
+    const subtaskDoneCount = hasSubtasks
+      ? task.subtasks.filter((s) => s.done).length
+      : 0;
+    const subtaskProgress = hasSubtasks
+      ? Math.round((subtaskDoneCount / task.subtasks.length) * 100)
+      : null;
+
     // If status is 'done', percentage is 100 regardless of stored progress value
-    const progressPercentage = isDone ? 100 : task.progress || 0;
+    const progressPercentage = isDone
+      ? 100
+      : hasSubtasks
+      ? subtaskProgress
+      : task.progress || 0;
 
     // Determine the progress bar fill color
     const progressColor = isDone
@@ -141,6 +158,50 @@ const TaskCard = React.memo(
       },
       [task.id, handleProgressChange]
     );
+
+    // Subtask handlers
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+
+    const toggleExpand = () => setIsExpanded((v) => !v);
+
+    const addSubtask = async () => {
+      const title = newSubtaskTitle.trim();
+      if (!title) return;
+      const newSubtask = {
+        id: crypto.randomUUID(),
+        title,
+        done: false,
+      };
+      const updated = Array.isArray(task.subtasks)
+        ? [...task.subtasks, newSubtask]
+        : [newSubtask];
+      await updateTask(task.id, {
+        subtasks: updated,
+        // set status to in-progress if we add subtasks
+        status: task.status === "done" ? "done" : "in-progress",
+        progress: Math.round(
+          (updated.filter((s) => s.done).length / updated.length) * 100
+        ),
+      });
+      setNewSubtaskTitle("");
+      setIsExpanded(true);
+    };
+
+    const toggleSubtaskDone = async (subtaskId) => {
+      const updated = (task.subtasks || []).map((s) =>
+        s.id === subtaskId ? { ...s, done: !s.done } : s
+      );
+      const doneCount = updated.filter((s) => s.done).length;
+      const newProgress = Math.round((doneCount / updated.length) * 100);
+      const newStatus =
+        newProgress === 100 ? "done" : newProgress > 0 ? "in-progress" : "todo";
+      await updateTask(task.id, {
+        subtasks: updated,
+        progress: newProgress,
+        status: newStatus,
+      });
+    };
 
     const handleDragStart = (e) => {
       onDragStart(e, task.id);
@@ -188,7 +249,7 @@ const TaskCard = React.memo(
 
           {/* Progress Slider (Only for In Progress) */}
           <div className="progress-slider-container">
-            {isProgress ? (
+            {isProgress && !hasSubtasks ? (
               <input
                 type="range"
                 min="1" // Start at 1 to prevent automatic status change to 'todo'
@@ -223,6 +284,18 @@ const TaskCard = React.memo(
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button
             className="icon-button"
+            onClick={toggleExpand}
+            title={isExpanded ? "Collapse" : "Expand"}
+          >
+            {isExpanded ? (
+              <span style={{ fontSize: "0.9rem" }}>▾</span>
+            ) : (
+              <span style={{ fontSize: "0.9rem" }}>▸</span>
+            )}
+          </button>
+
+          <button
+            className="icon-button"
             onClick={handleDeleteClick}
             title="Delete Task"
           >
@@ -232,6 +305,66 @@ const TaskCard = React.memo(
             />
           </button>
         </div>
+
+        {/* Subtasks Panel */}
+        {isExpanded && (
+          <div className="subtasks-panel" style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                placeholder="Add subtask title"
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                onClick={addSubtask}
+                className="icon-button"
+                title="Add subtask"
+              >
+                <PlusIcon size="1rem" />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              {(task.subtasks || []).map((s) => (
+                <div
+                  key={s.id}
+                  className="subtask-row"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 0",
+                  }}
+                >
+                  <label
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!s.done}
+                      onChange={() => toggleSubtaskDone(s.id)}
+                    />
+                    <span
+                      style={{
+                        textDecoration: s.done ? "line-through" : "none",
+                      }}
+                    >
+                      {s.title}
+                    </span>
+                  </label>
+                  {s.done && (
+                    <img
+                      src={stopIcon}
+                      alt="done"
+                      style={{ width: 18, height: 18 }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -312,10 +445,15 @@ export const App = () => {
     async (columnId) => {
       if (!db) return;
 
+      // Prompt for a task title
+      const title = prompt(`Enter task title for column '${columnId}':`);
+      if (!title || !title.trim()) return;
+
       const newTask = {
-        title: `New ${columnId} Task`,
+        title: title.trim(),
         status: columnId,
         progress: columnId === "done" ? 100 : 0,
+        subtasks: [],
         timestamp: Date.now(),
         ownerId: userId,
       };
@@ -459,20 +597,98 @@ export const App = () => {
     ? `${userId.substring(0, 4)}...${userId.substring(userId.length - 4)}`
     : "Guest";
 
+  // Overall progress across all tasks (based on finished tasks)
+  const allTasksArray = Object.values(tasks || {});
+  const totalTasksCount = allTasksArray.length;
+  const finishedTasksCount = allTasksArray.filter((t) => {
+    if (!t) return false;
+    if (t.status === "done") return true;
+    if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+      return t.subtasks.filter((s) => s.done).length === t.subtasks.length;
+    }
+    return t.progress === 100;
+  }).length;
+  const overallPercent = totalTasksCount
+    ? Math.round((finishedTasksCount / totalTasksCount) * 100)
+    : 0;
+
   return (
     <div className="app">
       {/* Top Bar/Header (Minimalist) */}
       <header className="px-4 py-3 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <WipIcon size="1.5rem" className="text-indigo-600" />
-            Kanban Hub
-          </h1>
-          <span className="text-xs text-gray-500">
-            User: {currentUserIdDisplay} (Public Board)
-          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <WipIcon size="1.5rem" className="text-indigo-600" />
+              Kanban Hub
+            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={overallPercent}
+                readOnly
+                disabled
+                style={{ width: 200 }}
+              />
+              <span style={{ fontSize: 12, color: "#374151" }}>
+                {overallPercent}%
+              </span>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img
+                src={percentageIcon}
+                alt="percent"
+                style={{ width: 20, height: 20 }}
+              />
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={overallPercent}
+                readOnly
+                disabled
+                style={{ width: 180 }}
+              />
+              <span style={{ fontSize: 12, color: "#374151" }}>
+                {overallPercent}%
+              </span>
+            </div>
+
+            <span className="text-xs text-gray-500">
+              User: {currentUserIdDisplay} (Public Board)
+            </span>
+          </div>
         </div>
       </header>
+
+      {/* Overall progress bar at top of tasks */}
+      <div
+        style={{ maxWidth: "1200px", margin: "12px auto", padding: "0 16px" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img
+            src={percentageIcon}
+            alt="percent"
+            style={{ width: 20, height: 20 }}
+          />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={overallPercent}
+            readOnly
+            disabled
+            style={{ flex: 1 }}
+          />
+          <span style={{ width: 48, textAlign: "right" }}>
+            {overallPercent}%
+          </span>
+        </div>
+      </div>
 
       <main className="board-container">
         {COLUMNS.map((column) => (
@@ -509,6 +725,7 @@ export const App = () => {
                   onDragStart={handleDragStart}
                   handleProgressChange={handleProgressChange}
                   handleDeleteTask={handleDeleteTask}
+                  updateTask={updateTask}
                 />
               ))}
               {/* Drop Target Placeholder for Empty Columns */}
