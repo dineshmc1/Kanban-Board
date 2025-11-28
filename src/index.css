@@ -1,19 +1,51 @@
-/* Dark Mode Kanban - Modern Glassmorphism Theme */
-
+/* Professional Premium Kanban Theme */
 :root {
-  --bg-900: #0b1020; /* deep navy */
-  --bg-800: #0f1724;
-  --panel: rgba(255, 255, 255, 0.04);
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-2: rgba(255, 255, 255, 0.02);
-  --muted: #98a0b3;
+  --bg-900: #101624;
+  --bg-800: #181e2a;
+  --panel: rgba(255, 255, 255, 0.06);
+  --glass: rgba(255, 255, 255, 0.08);
+  --glass-2: rgba(255, 255, 255, 0.04);
+  --muted: #a3adc2;
   --accent: linear-gradient(90deg, #7c3aed 0%, #06b6d4 100%);
   --accent-solid: #7c3aed;
   --success: #06b6d4;
   --danger: #fb7185;
-  --card-border: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 6px 30px rgba(2, 6, 23, 0.6);
-  --radius-lg: 14px;
+  --card-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(16, 22, 36, 0.45);
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --header-font: "Inter", "Segoe UI", Arial, sans-serif;
+  --body-font: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-size-lg: 1.25rem;
+  --font-size-md: 1rem;
+  --font-size-sm: 0.92rem;
+  --font-size-xs: 0.82rem;
+}
+
+body {
+  margin: 0;
+  font-family: var(--body-font);
+  background: linear-gradient(
+      120deg,
+      rgba(124, 58, 237, 0.1) 0%,
+      rgba(6, 182, 212, 0.08) 100%
+    ),
+    radial-gradient(
+      1200px 400px at 10% 10%,
+      rgba(124, 58, 237, 0.13),
+      transparent
+    ),
+    radial-gradient(
+      900px 300px at 90% 90%,
+      rgba(6, 182, 212, 0.09),
+      transparent
+    ),
+    var(--bg-900);
+  color: #eaf0fa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.01em;
 }
 
 * {
@@ -27,50 +59,28 @@ body,
   height: 100%;
 }
 
-body {
-  margin: 0;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial;
-  background: radial-gradient(
-      1200px 400px at 10% 10%,
-      rgba(124, 58, 237, 0.12),
-      transparent
-    ),
-    radial-gradient(
-      900px 300px at 90% 90%,
-      rgba(6, 182, 212, 0.06),
-      transparent
-    ),
-    var(--bg-900);
-  color: #e6eef8;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 /* Layout */
 .board-container {
   display: flex;
-  gap: 1.25rem;
-  padding: 1.5rem;
+  gap: 2.5rem;
+  padding: 2.5rem 2rem 2rem 2rem;
   width: 100%;
   overflow-x: auto;
+  min-height: 70vh;
 }
 
 .column {
-  min-width: 320px;
-  width: 320px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.02),
-    rgba(255, 255, 255, 0.01)
-  );
+  min-width: 340px;
+  width: 340px;
+  background: linear-gradient(120deg, var(--glass), var(--glass-2));
   border-radius: var(--radius-lg);
-  border: 1px solid var(--card-border);
-  backdrop-filter: blur(8px) saturate(120%);
+  border: 1.5px solid var(--card-border);
+  backdrop-filter: blur(14px) saturate(140%);
   box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 130px);
+  max-height: calc(100vh - 140px);
+  transition: box-shadow 0.2s;
 }
 
 .column-header {
