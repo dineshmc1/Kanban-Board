@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import "./App.css";
 
 // --- Firebase Imports (required for persistent, real-time storage) ---
 import { initializeApp } from "firebase/app";
@@ -19,17 +18,71 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 
-// --- Icon Asset Paths (Using the public path for reliable access) ---
-// Since direct relative imports caused issues, we reference the assets
-// using their expected public path, assuming they are accessible via the root URL.
-const ASSETS = {
-  CheckedIcon: "/assets/checked.svg",
-  GripVerticalIcon: "/assets/dots.svg",
-  CircleIcon: "/assets/dry-clean.svg",
-  PlusIcon: "/assets/plus.svg",
-  TrashIcon: "/assets/trash-can.svg",
-  WipIcon: "/assets/work-in-progress.svg",
-};
+// --- Icon Components (Inline SVG to bypass file resolution issues) ---
+
+const Icon = ({ size = "1em", strokeWidth = 2, children, ...props }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    {children}
+  </svg>
+);
+
+const PlusIcon = (props) => (
+  <Icon {...props}>
+    <line x1="12" y1="5" x2="12" y2="19"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+  </Icon>
+);
+
+const CheckedIcon = (props) => (
+  <Icon {...props}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+  </Icon>
+);
+
+const CircleIcon = (props) => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="10"></circle>
+  </Icon>
+);
+
+const GripVerticalIcon = (props) => (
+  <Icon {...props}>
+    <circle cx="9" cy="12" r="1"></circle>
+    <circle cx="9" cy="5" r="1"></circle>
+    <circle cx="9" cy="19" r="1"></circle>
+    <circle cx="15" cy="12" r="1"></circle>
+    <circle cx="15" cy="5" r="1"></circle>
+    <circle cx="15" cy="19" r="1"></circle>
+  </Icon>
+);
+
+const TrashIcon = (props) => (
+  <Icon {...props}>
+    <polyline points="3 6 5 6 21 6"></polyline>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+  </Icon>
+);
+
+const WipIcon = (props) => (
+  <Icon {...props}>
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+    <path d="M21 3v5h-5"></path>
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+    <path d="M3 21v-5h5"></path>
+  </Icon>
+);
 
 // --- Data & Constants ---
 const COLUMNS = [
@@ -41,7 +94,6 @@ const COLUMNS = [
 // --- Utility Functions for Firebase Setup ---
 const getFirebaseConfig = () => {
   try {
-    // This variable is provided by the execution environment
     return JSON.parse(
       typeof __firebase_config !== "undefined" ? __firebase_config : "{}"
     );
@@ -51,9 +103,11 @@ const getFirebaseConfig = () => {
   }
 };
 
+// Simplified path for public data: artifacts/{appId}/kanban_tasks (3 segments)
 const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
 const initialAuthToken =
   typeof __initial_auth_token !== "undefined" ? __initial_auth_token : null;
+const TASK_COLLECTION_PATH = `artifacts/${appId}/kanban_tasks`;
 
 // The Task Card Component
 const TaskCard = React.memo(
@@ -67,6 +121,7 @@ const TaskCard = React.memo(
   }) => {
     const isProgress = task.status === "in-progress";
     const isDone = task.status === "done";
+    // If status is 'done', percentage is 100 regardless of stored progress value
     const progressPercentage = isDone ? 100 : task.progress || 0;
 
     // Determine the progress bar fill color
@@ -78,15 +133,29 @@ const TaskCard = React.memo(
 
     const handleUpdateProgress = useCallback(
       (e) => {
-        // Only allow setting progress up to 99% for 'in-progress' state
+        // Only allow setting progress between 1% and 99% for 'in-progress' state via slider
         const value = parseInt(e.target.value, 10);
-        handleProgressChange(task.id, Math.min(99, value));
+        // Ensure value is not 0 or 100, which should be handled by drag-and-drop
+        const newProgress = Math.min(99, Math.max(1, value));
+        handleProgressChange(task.id, newProgress);
       },
       [task.id, handleProgressChange]
     );
 
     const handleDragStart = (e) => {
       onDragStart(e, task.id);
+    };
+
+    // Custom message box logic (replaces window.confirm)
+    const handleDeleteClick = () => {
+      // In a production app, this would show a proper modal.
+      // For this environment, we use a simple console prompt as a safeguard against accidental deletion.
+      const confirmDelete = prompt(
+        `Type "DELETE" to confirm deletion of task: "${task.title}"`
+      );
+      if (confirmDelete === "DELETE") {
+        handleDeleteTask(task.id);
+      }
     };
 
     return (
@@ -99,43 +168,22 @@ const TaskCard = React.memo(
         <div className="flex-row">
           <h3 className="task-card-title">{task.title}</h3>
           {/* Drag Handle */}
-          <button className="icon-button drag-handle">
-            <img
-              src={ASSETS.GripVerticalIcon}
-              alt="Drag"
-              style={{ width: "1.25rem", height: "1.25rem" }}
-            />
+          <button className="icon-button drag-handle" title="Drag to move task">
+            <GripVerticalIcon size="1.25rem" className="text-gray-400" />
           </button>
         </div>
 
         <div className="task-status-bar">
           {/* Status Icon */}
           <div
+            className="flex items-center"
             style={{
               color: isDone ? "#10b981" : isProgress ? "#3b82f6" : "#f87171",
             }}
           >
-            {isDone && (
-              <img
-                src={ASSETS.CheckedIcon}
-                alt="Done"
-                style={{ width: "1rem", height: "1rem" }}
-              />
-            )}
-            {isProgress && (
-              <img
-                src={ASSETS.WipIcon}
-                alt="WIP"
-                style={{ width: "1rem", height: "1rem" }}
-              />
-            )}
-            {!isProgress && !isDone && (
-              <img
-                src={ASSETS.CircleIcon}
-                alt="To Do"
-                style={{ width: "1rem", height: "1rem" }}
-              />
-            )}
+            {isDone && <CheckedIcon size="1rem" />}
+            {isProgress && <WipIcon size="1rem" />}
+            {!isProgress && !isDone && <CircleIcon size="1rem" />}
           </div>
 
           {/* Progress Slider (Only for In Progress) */}
@@ -143,8 +191,8 @@ const TaskCard = React.memo(
             {isProgress ? (
               <input
                 type="range"
-                min="0"
-                max="99"
+                min="1" // Start at 1 to prevent automatic status change to 'todo'
+                max="99" // End at 99 to prevent automatic status change to 'done'
                 value={progressPercentage}
                 onChange={handleUpdateProgress}
                 style={{
@@ -175,13 +223,12 @@ const TaskCard = React.memo(
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button
             className="icon-button"
-            onClick={() => handleDeleteTask(task.id)}
+            onClick={handleDeleteClick}
             title="Delete Task"
           >
-            <img
-              src={ASSETS.TrashIcon}
-              alt="Delete"
-              style={{ width: "1rem", height: "1rem", color: "#ef4444" }}
+            <TrashIcon
+              size="1rem"
+              className="text-red-500 hover:text-red-700"
             />
           </button>
         </div>
@@ -216,7 +263,6 @@ export const App = () => {
 
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
       if (!user) {
-        // Sign in anonymously if no user is found
         try {
           if (initialAuthToken) {
             await signInWithCustomToken(firebaseAuth, initialAuthToken);
@@ -227,7 +273,6 @@ export const App = () => {
           console.error("Auth sign-in failed:", error);
         }
       }
-      // User is now authenticated (either previously or anonymously/custom)
       setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
       setIsAuthReady(true);
     });
@@ -239,13 +284,9 @@ export const App = () => {
   useEffect(() => {
     if (!db || !isAuthReady) return;
 
-    // Public collection path: /artifacts/{appId}/public/data/kanban_tasks
-    const taskCollectionRef = collection(
-      db,
-      `artifacts/${appId}/public/data/kanban_tasks`
-    );
+    // Use simplified, valid path: artifacts/{appId}/kanban_tasks (3 segments)
+    const taskCollectionRef = collection(db, TASK_COLLECTION_PATH);
 
-    // Listen for real-time updates
     const unsubscribeSnapshot = onSnapshot(
       taskCollectionRef,
       (snapshot) => {
@@ -255,7 +296,7 @@ export const App = () => {
           newTasks[doc.id] = { id: doc.id, ...data };
         });
         setTasks(newTasks);
-        console.log("Tasks updated from Firestore.");
+        // console.log("Tasks updated from Firestore.");
       },
       (error) => {
         console.error("Error listening to Firestore:", error);
@@ -263,7 +304,7 @@ export const App = () => {
     );
 
     return () => unsubscribeSnapshot();
-  }, [db, isAuthReady]); // Re-run only when db or auth state changes
+  }, [db, isAuthReady]);
 
   // --- 3. CRUD Operations (Connected to Firestore) ---
 
@@ -280,9 +321,9 @@ export const App = () => {
       };
 
       try {
-        // Use setDoc with an explicit ID (timestamp is good for ordering)
+        // Use timestamp as the explicit document ID for ordering
         const newDocRef = doc(
-          collection(db, `artifacts/${appId}/public/data/kanban_tasks`),
+          collection(db, TASK_COLLECTION_PATH),
           String(newTask.timestamp)
         );
         await setDoc(newDocRef, newTask);
@@ -297,10 +338,7 @@ export const App = () => {
     async (taskId, updateData) => {
       if (!db || !taskId) return;
 
-      const taskDocRef = doc(
-        db,
-        `artifacts/${appId}/public/data/kanban_tasks/${taskId}`
-      );
+      const taskDocRef = doc(db, TASK_COLLECTION_PATH, taskId);
       try {
         await updateDoc(taskDocRef, updateData);
       } catch (error) {
@@ -312,15 +350,9 @@ export const App = () => {
 
   const handleDeleteTask = useCallback(
     async (taskId) => {
-      // IMPORTANT: Custom modal should be used instead of window.confirm in real apps
-      // but for simplicity in this environment, we temporarily keep it.
-      if (!db || !window.confirm("Are you sure you want to delete this task?"))
-        return;
+      if (!db || !taskId) return;
 
-      const taskDocRef = doc(
-        db,
-        `artifacts/${appId}/public/data/kanban_tasks/${taskId}`
-      );
+      const taskDocRef = doc(db, TASK_COLLECTION_PATH, taskId);
       try {
         await deleteDoc(taskDocRef);
       } catch (error) {
@@ -332,17 +364,10 @@ export const App = () => {
 
   const handleProgressChange = useCallback(
     (taskId, newProgress) => {
-      // Determine new status based on new progress
-      let newStatus = "in-progress";
-      if (newProgress === 100) {
-        newStatus = "done";
-      } else if (newProgress === 0) {
-        newStatus = "todo";
-      }
-
+      // This is only called when using the slider (1% to 99%), so status is always 'in-progress'
       updateTask(taskId, {
         progress: newProgress,
-        status: newStatus,
+        status: "in-progress",
       });
     },
     [updateTask]
@@ -356,7 +381,7 @@ export const App = () => {
   };
 
   const handleDragOver = (e) => {
-    e.preventDefault(); // Required to allow drop
+    e.preventDefault();
     e.currentTarget.classList.add("drag-over");
   };
 
@@ -372,7 +397,7 @@ export const App = () => {
     const task = tasks[taskId];
     if (!task || task.status === newStatus) return;
 
-    e.target.closest(".task-card")?.classList.remove("is-dragging"); // Clean up dragging class
+    e.target.closest(".task-card")?.classList.remove("is-dragging");
 
     // Determine progress based on the new status
     let newProgress;
@@ -382,7 +407,7 @@ export const App = () => {
       newProgress = 100;
     } else {
       // 'in-progress'
-      // Retain progress if task was already in progress (but not 0 or 100), otherwise default to 1
+      // Retain progress if task was already in progress, otherwise default to 1 (min for slider)
       newProgress =
         task.status === "in-progress" &&
         task.progress > 0 &&
@@ -403,7 +428,6 @@ export const App = () => {
     return Object.values(tasks).reduce(
       (acc, task) => {
         if (!acc[task.status]) acc[task.status] = [];
-        // Sort tasks by timestamp (creation time)
         acc[task.status].push(task);
         return acc;
       },
@@ -412,7 +436,7 @@ export const App = () => {
   }, [tasks]);
 
   const sortedGroupedTasks = useMemo(() => {
-    // Sort within each group by timestamp (latest created at the bottom)
+    // Sort within each group by timestamp (oldest created at the top)
     return Object.keys(groupedTasks).reduce((acc, status) => {
       acc[status] = groupedTasks[status].sort(
         (a, b) => a.timestamp - b.timestamp
@@ -441,11 +465,7 @@ export const App = () => {
       <header className="px-4 py-3 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <img
-              src={ASSETS.WipIcon}
-              alt="Board Icon"
-              style={{ width: "1.5rem", height: "1.5rem" }}
-            />
+            <WipIcon size="1.5rem" className="text-indigo-600" />
             Kanban Hub
           </h1>
           <span className="text-xs text-gray-500">
@@ -475,11 +495,7 @@ export const App = () => {
                 onClick={() => addTask(column.id)}
                 title={`Add task to ${column.title}`}
               >
-                <img
-                  src={ASSETS.PlusIcon}
-                  alt="Add"
-                  style={{ width: "1.25rem", height: "1.25rem" }}
-                />
+                <PlusIcon size="1.25rem" />
               </button>
             </div>
 
