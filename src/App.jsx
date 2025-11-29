@@ -1,15 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-// Import Icons - Note: I'm keeping the original imports but will recommend the ones to use later
-import stopIcon from "./assets/stop.svg";
-import percentageIcon from "./assets/percentage.svg";
-import dotsIcon from "./assets/dots.svg"; // Drag Handle
-import checkedIconImg from "./assets/checked.svg"; // Done Status
-import wipIconImg from "./assets/work-in-progress.svg"; // In Progress Status
-import dryCleanIcon from "./assets/dry-clean.svg"; // To Do Status
-import menuIcon from "./assets/menu-bar.svg"; // Menu/More icon
-import trashIconImg from "./assets/trash-can.svg"; // Delete icon
-import plusSvgImg from "./assets/plus.svg"; // Plus icon
-import reactLogoImg from "./assets/react.svg"; // Tech badge
 
 // --- Firebase Imports ---
 import { initializeApp } from "firebase/app";
@@ -29,9 +18,8 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 
-// --- Icon Components (Inline SVG - Kept for compatibility) ---
-
-const Icon = ({ size = "1em", strokeWidth = 2, children, ...props }) => (
+// --- Icon Components (Replacing external assets) ---
+const Icon = ({ size = 20, className = "", children, ...props }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size}
@@ -39,43 +27,27 @@ const Icon = ({ size = "1em", strokeWidth = 2, children, ...props }) => (
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth={strokeWidth}
+    strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
+    className={className}
     {...props}
   >
     {children}
   </svg>
 );
 
+const XIcon = (props) => (
+  <Icon {...props}>
+    <line x1="18" y1="6" x2="6" y2="18"></line>
+    <line x1="6" y1="6" x2="18" y2="18"></line>
+  </Icon>
+);
+
 const PlusIcon = (props) => (
   <Icon {...props}>
     <line x1="12" y1="5" x2="12" y2="19"></line>
     <line x1="5" y1="12" x2="19" y2="12"></line>
-  </Icon>
-);
-
-const CheckedIcon = (props) => (
-  <Icon {...props}>
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-  </Icon>
-);
-
-const CircleIcon = (props) => (
-  <Icon {...props}>
-    <circle cx="12" cy="12" r="10"></circle>
-  </Icon>
-);
-
-const GripVerticalIcon = (props) => (
-  <Icon {...props}>
-    <circle cx="9" cy="12" r="1"></circle>
-    <circle cx="9" cy="5" r="1"></circle>
-    <circle cx="9" cy="19" r="1"></circle>
-    <circle cx="15" cy="12" r="1"></circle>
-    <circle cx="15" cy="5" r="1"></circle>
-    <circle cx="15" cy="19" r="1"></circle>
   </Icon>
 );
 
@@ -86,23 +58,51 @@ const TrashIcon = (props) => (
   </Icon>
 );
 
-const WipIcon = (props) => (
+const MenuIcon = (props) => (
   <Icon {...props}>
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-    <path d="M21 3v5h-5"></path>
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
-    <path d="M3 21v-5h5"></path>
+    <circle cx="12" cy="12" r="1"></circle>
+    <circle cx="19" cy="12" r="1"></circle>
+    <circle cx="5" cy="12" r="1"></circle>
   </Icon>
 );
 
-// --- Data & Constants ---
+const DragHandleIcon = (props) => (
+  <Icon {...props}>
+    <circle cx="9" cy="12" r="1"></circle>
+    <circle cx="9" cy="5" r="1"></circle>
+    <circle cx="9" cy="19" r="1"></circle>
+    <circle cx="15" cy="12" r="1"></circle>
+    <circle cx="15" cy="5" r="1"></circle>
+    <circle cx="15" cy="19" r="1"></circle>
+  </Icon>
+);
+
+const ReactLogoIcon = (props) => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="-10.5 -9.45 21 18.9"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className="react-badge"
+    {...props}
+  >
+    <circle cx="0" cy="0" r="2" fill="#00d8ff" />
+    <g stroke="#00d8ff" strokeWidth="1" fill="none">
+      <ellipse rx="10" ry="4.5" />
+      <ellipse rx="10" ry="4.5" transform="rotate(60)" />
+      <ellipse rx="10" ry="4.5" transform="rotate(120)" />
+    </g>
+  </svg>
+);
+
+// --- Constants ---
 const COLUMNS = [
   { id: "todo", title: "To Do", className: "todo" },
   { id: "in-progress", title: "In Progress", className: "in-progress" },
   { id: "done", title: "Done", className: "done" },
 ];
 
-// --- Utility Functions for Firebase Setup ---
 const getFirebaseConfig = () => {
   try {
     return JSON.parse(
@@ -114,19 +114,210 @@ const getFirebaseConfig = () => {
   }
 };
 
-// Simplified path for public data: artifacts/{appId}/kanban_tasks (3 segments)
 const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
 const initialAuthToken =
   typeof __initial_auth_token !== "undefined" ? __initial_auth_token : null;
 const TASK_COLLECTION_PATH = `artifacts/${appId}/kanban_tasks`;
 
-// --- NEW Component for Overall Progress Bar ---
+// --- NEW COMPONENT: Modal for Adding Tasks ---
+const NewTaskModal = ({ isOpen, onClose, onSubmit, initialLane = "todo" }) => {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("Medium");
+  const [lane, setLane] = useState(initialLane);
+
+  // Subtasks State
+  const [subtasks, setSubtasks] = useState([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTitle("");
+      setDescription("");
+      setPriority("Medium");
+      setLane(initialLane);
+      setSubtasks([]);
+      setNewSubtaskTitle("");
+    }
+  }, [isOpen, initialLane]);
+
+  if (!isOpen) return null;
+
+  const handleAddSubtask = (e) => {
+    e.preventDefault(); // Prevent form submission
+    if (!newSubtaskTitle.trim()) return;
+
+    const newItem = {
+      id: crypto.randomUUID(),
+      title: newSubtaskTitle,
+      done: false,
+    };
+    setSubtasks([...subtasks, newItem]);
+    setNewSubtaskTitle("");
+  };
+
+  const removeSubtask = (id) => {
+    setSubtasks(subtasks.filter((s) => s.id !== id));
+  };
+
+  const toggleSubtaskInModal = (id) => {
+    setSubtasks(
+      subtasks.map((s) => (s.id === id ? { ...s, done: !s.done } : s))
+    );
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+
+    onSubmit({
+      title,
+      description,
+      priority,
+      status: lane,
+      subtasks,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Add New Task</h2>
+          <button type="button" className="close-btn" onClick={onClose}>
+            <XIcon size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Title *</label>
+            <input
+              className="form-input"
+              placeholder="Enter task title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Description</label>
+            <textarea
+              className="form-textarea"
+              placeholder="Enter task description"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="form-row-2">
+            <div className="form-group">
+              <label>Priority</label>
+              <select
+                className="form-select"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Lane</label>
+              <select
+                className="form-select"
+                value={lane}
+                onChange={(e) => setLane(e.target.value)}
+              >
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Subtask Section in Modal */}
+          <div className="form-group">
+            <label>Subtasks</label>
+            <div className="subtask-input-wrapper">
+              <input
+                className="form-input"
+                placeholder="Add new subtask..."
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddSubtask(e);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="icon-btn-add"
+                onClick={handleAddSubtask}
+              >
+                <PlusIcon size={20} />
+              </button>
+            </div>
+
+            <div className="modal-subtask-list">
+              {subtasks.map((sub) => (
+                <div key={sub.id} className="modal-subtask-item">
+                  <label className="subtask-label">
+                    <input
+                      type="checkbox"
+                      className="thick-checkbox"
+                      checked={sub.done}
+                      onChange={() => toggleSubtaskInModal(sub.id)}
+                    />
+                    <span
+                      style={{
+                        textDecoration: sub.done ? "line-through" : "none",
+                        color: sub.done ? "var(--muted)" : "inherit",
+                      }}
+                    >
+                      {sub.title}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="icon-btn-delete"
+                    onClick={() => removeSubtask(sub.id)}
+                  >
+                    <TrashIcon size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="btn-cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-submit">
+              Add Task
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// --- Overall Progress Bar ---
 const OverallProgressBar = ({
   overallPercent,
   finishedTasksCount,
   totalTasksCount,
 }) => {
-  // Determine the color gradient based on the column colors in index.css
   const gradient =
     "linear-gradient(90deg, var(--accent-solid), var(--success))";
 
@@ -135,13 +326,13 @@ const OverallProgressBar = ({
       className="overall-progress-bar"
       style={{
         maxWidth: "1200px",
-        margin: "0 auto 2.5rem auto", // Added bottom margin to separate from columns
-        padding: "0 2rem", // Match board-container padding on sides
+        margin: "0 auto 3rem auto", // Changed bottom margin to 3rem for spacing
+        padding: "0 2rem",
       }}
     >
       <div
         style={{
-          background: "var(--glass-2)", // Use a darker background for this section
+          background: "var(--glass-2)",
           padding: "20px 24px",
           borderRadius: "var(--radius-lg)",
           border: "1.5px solid var(--card-border)",
@@ -170,13 +361,12 @@ const OverallProgressBar = ({
             style={{
               fontSize: "var(--font-size-lg)",
               fontWeight: 700,
-              color: "#fff", // White color for the percentage score
+              color: "#fff",
             }}
           >
             {overallPercent}%
           </span>
         </div>
-        {/* Visual Progress Bar (based on subtask-progress styles) */}
         <div style={{ marginTop: 12 }}>
           <div
             className="subtask-progress"
@@ -186,7 +376,7 @@ const OverallProgressBar = ({
               className="fill"
               style={{
                 height: "100%",
-                background: gradient, // Use the accent gradient
+                background: gradient,
                 width: `${overallPercent}%`,
                 borderRadius: "inherit",
               }}
@@ -198,20 +388,16 @@ const OverallProgressBar = ({
   );
 };
 
-// The Task Card Component
+// --- Task Card Component ---
 const TaskCard = React.memo(
   ({
     task,
-    db,
-    userId,
     onDragStart,
     handleProgressChange,
     handleDeleteTask,
     updateTask,
   }) => {
-    const isProgress = task.status === "in-progress";
     const isDone = task.status === "done";
-    // If task has subtasks, compute progress from subtasks
     const hasSubtasks =
       Array.isArray(task.subtasks) && task.subtasks.length > 0;
     const subtaskDoneCount = hasSubtasks
@@ -221,35 +407,18 @@ const TaskCard = React.memo(
       ? Math.round((subtaskDoneCount / task.subtasks.length) * 100)
       : null;
 
-    // If status is 'done', percentage is 100 regardless of stored progress value
     const progressPercentage = isDone
       ? 100
       : hasSubtasks
       ? subtaskProgress
       : task.progress || 0;
 
-    // Determine the progress bar fill color
-    // Use CSS variables for a consistent look
-
-    const handleUpdateProgress = useCallback(
-      (e) => {
-        // Only allow setting progress between 1% and 99% for 'in-progress' state via slider
-        const value = parseInt(e.target.value, 10);
-        // Ensure value is not 0 or 100, which should be handled by drag-and-drop
-        const newProgress = Math.min(99, Math.max(1, value));
-        handleProgressChange(task.id, newProgress);
-      },
-      [task.id, handleProgressChange]
-    );
-
-    // Subtask handlers
+    // Subtask handlers inside Card
     const [isExpanded, setIsExpanded] = useState(false);
-    const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
-
-    const toggleExpand = () => setIsExpanded((v) => !v);
+    const [cardNewSubtask, setCardNewSubtask] = useState("");
 
     const addSubtask = async () => {
-      const title = newSubtaskTitle.trim();
+      const title = cardNewSubtask.trim();
       if (!title) return;
       const newSubtask = {
         id: crypto.randomUUID(),
@@ -259,10 +428,9 @@ const TaskCard = React.memo(
       const updated = Array.isArray(task.subtasks)
         ? [...task.subtasks, newSubtask]
         : [newSubtask];
+
       const doneCount = updated.filter((s) => s.done).length;
       const newProgress = Math.round((doneCount / updated.length) * 100);
-
-      // Check if status needs to be updated. If subtasks are added, it should minimally be 'in-progress'
       const newStatus =
         newProgress === 100 ? "done" : newProgress > 0 ? "in-progress" : "todo";
 
@@ -271,8 +439,7 @@ const TaskCard = React.memo(
         status: newStatus,
         progress: newProgress,
       });
-      setNewSubtaskTitle("");
-      setIsExpanded(true);
+      setCardNewSubtask("");
     };
 
     const toggleSubtaskDone = async (subtaskId) => {
@@ -283,6 +450,7 @@ const TaskCard = React.memo(
       const newProgress = Math.round((doneCount / updated.length) * 100);
       const newStatus =
         newProgress === 100 ? "done" : newProgress > 0 ? "in-progress" : "todo";
+
       await updateTask(task.id, {
         subtasks: updated,
         progress: newProgress,
@@ -290,16 +458,32 @@ const TaskCard = React.memo(
       });
     };
 
-    const handleDragStart = (e) => {
-      onDragStart(e, task.id);
+    const deleteSubtask = async (subtaskId) => {
+      const updated = (task.subtasks || []).filter((s) => s.id !== subtaskId);
+      // Re-calc progress
+      let newProgress = 0;
+      let newStatus = task.status;
+
+      if (updated.length > 0) {
+        const doneCount = updated.filter((s) => s.done).length;
+        newProgress = Math.round((doneCount / updated.length) * 100);
+        newStatus =
+          newProgress === 100
+            ? "done"
+            : newProgress > 0
+            ? "in-progress"
+            : "todo";
+      }
+
+      await updateTask(task.id, {
+        subtasks: updated,
+        progress: newProgress,
+        status: newStatus,
+      });
     };
 
-    // Custom message box logic (replaces window.confirm)
     const handleDeleteClick = () => {
-      const confirmDelete = prompt(
-        `Type "DELETE" to confirm deletion of task: "${task.title}"`
-      );
-      if (confirmDelete === "DELETE") {
+      if (confirm(`Delete task "${task.title}"?`)) {
         handleDeleteTask(task.id);
       }
     };
@@ -308,10 +492,9 @@ const TaskCard = React.memo(
       <div
         className={`task-card ${task.isDragging ? "is-dragging" : ""}`}
         draggable
-        onDragStart={handleDragStart}
+        onDragStart={(e) => onDragStart(e, task.id)}
         id={`task-${task.id}`}
       >
-        {/* Title and Priority/Tech Badge */}
         <div
           style={{
             display: "flex",
@@ -321,56 +504,47 @@ const TaskCard = React.memo(
         >
           <h3 className="task-card-title">{task.title}</h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {task.isTech && (
-              <img
-                src={reactLogoImg}
-                alt="tech"
-                className="react-badge"
-                title="Tech task"
-              />
-            )}
+            {task.isTech && <ReactLogoIcon />}
             <div
               className={`priority-pill ${
-                task.priority === "low"
+                task.priority === "Low"
                   ? "priority-low"
-                  : task.priority === "medium"
-                  ? "priority-medium"
-                  : task.priority === "high"
+                  : task.priority === "High"
                   ? "priority-high"
-                  : ""
+                  : "priority-medium"
               }`}
             >
-              {(task.priority || "Low").toUpperCase()}
+              {(task.priority || "Medium").toUpperCase()}
             </div>
           </div>
         </div>
 
-        {/* Description (Moved below title) */}
         {task.description && (
           <div className="task-card-desc">{task.description}</div>
         )}
 
-        {/* Subtask Progress Bar (always visible at bottom) */}
         <div
           style={{
-            marginTop: 6,
+            marginTop: 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
-          {/* Subtask Count */}
-          {hasSubtasks && (
+          {hasSubtasks ? (
             <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-              Subtask: {subtaskDoneCount}/{task.subtasks.length}
+              Subtasks: {subtaskDoneCount}/{task.subtasks.length}
+            </span>
+          ) : (
+            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+              {isDone ? "Completed" : "No subtasks"}
             </span>
           )}
 
-          {/* Progress Percentage - Moved to the right of the bar in the design */}
           <span
             className="percentage-score"
             style={{
-              color: isDone ? "var(--success)" : "var(--accent-solid)", // Matching the design's colors
+              color: isDone ? "var(--success)" : "var(--accent-solid)",
               fontSize: "0.85rem",
               fontWeight: 600,
             }}
@@ -379,19 +553,16 @@ const TaskCard = React.memo(
           </span>
         </div>
 
-        {/* Visual Progress Bar - Bottom of card */}
         <div className="subtask-progress">
           <div
             className="fill"
             style={{
               width: `${progressPercentage}%`,
-              // Use the accent gradient for progress bar fill, if not 100% done
               background: isDone ? "var(--success)" : "var(--accent)",
             }}
           />
         </div>
 
-        {/* Card Actions (Drag Handle, Menu, Delete) - Aligned to bottom right */}
         <div
           style={{
             display: "flex",
@@ -400,58 +571,39 @@ const TaskCard = React.memo(
             marginTop: 10,
           }}
         >
-          {/* Drag Handle */}
-          <img
-            src={dotsIcon}
-            alt="drag"
-            className="drag-handle-img"
-            draggable
-            title="Drag"
-          />
+          <div className="drag-handle-wrapper" title="Drag">
+            <DragHandleIcon className="action-icon drag-handle-icon" />
+          </div>
 
-          {/* Menu Button (dots) */}
-          <button className="icon-button" onClick={() => {}} title="More">
-            <img src={menuIcon} alt="menu" className="action-img" />
+          {/* Subtask toggle button */}
+          <button
+            className="icon-button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            title="Manage Subtasks"
+          >
+            <MenuIcon className="action-icon" />
           </button>
 
-          {/* Trash Button */}
           <button
             className="icon-button"
             onClick={handleDeleteClick}
             title="Delete Task"
           >
-            <img src={trashIconImg} alt="delete" className="action-img" />
+            <TrashIcon className="action-icon" />
           </button>
         </div>
 
-        {/* Subtasks Panel (Expanded View - Kept functionality) */}
         {isExpanded && (
-          <div className="subtasks-panel" style={{ marginTop: 8 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                placeholder="Add subtask title"
-                value={newSubtaskTitle}
-                onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: 8,
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.04)",
-                  background: "transparent",
-                  color: "inherit",
-                  fontSize: "var(--font-size-sm)",
-                }}
-              />
-              <button
-                onClick={addSubtask}
-                className="icon-button"
-                title="Add subtask"
-              >
-                <img src={plusSvgImg} alt="add" className="action-img" />
-              </button>
-            </div>
-
-            <div style={{ marginTop: 8 }}>
+          <div
+            className="subtasks-panel"
+            style={{
+              marginTop: 12,
+              padding: 8,
+              background: "rgba(0,0,0,0.2)",
+              borderRadius: 8,
+            }}
+          >
+            <div style={{ marginBottom: 8 }}>
               {(task.subtasks || []).map((s) => (
                 <div
                   key={s.id}
@@ -460,57 +612,83 @@ const TaskCard = React.memo(
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: "6px 0",
-                    fontSize: "var(--font-size-sm)",
+                    padding: "4px 0",
                   }}
                 >
-                  <label
+                  {/* Thick box for done subtask */}
+                  <input
+                    type="checkbox"
+                    className="thick-checkbox"
+                    checked={!!s.done}
+                    onChange={() => toggleSubtaskDone(s.id)}
+                  />
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
                       flex: 1,
+                      fontSize: "0.9rem",
+                      textDecoration: s.done ? "line-through" : "none",
+                      color: s.done ? "gray" : "white",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={!!s.done}
-                      onChange={() => toggleSubtaskDone(s.id)}
+                    {s.title}
+                  </span>
+                  <button
+                    onClick={() => deleteSubtask(s.id)}
+                    className="icon-button"
+                    style={{ width: 20, height: 20 }}
+                  >
+                    <TrashIcon
+                      size={14}
+                      className="action-icon"
+                      style={{ opacity: 0.7 }}
                     />
-                    <span
-                      style={{
-                        textDecoration: s.done ? "line-through" : "none",
-                      }}
-                    >
-                      {s.title}
-                    </span>
-                  </label>
-                  {/* Icon for completed subtask - removed as it clutters the subtask list */}
+                  </button>
                 </div>
               ))}
             </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                placeholder="Add subtask..."
+                value={cardNewSubtask}
+                onChange={(e) => setCardNewSubtask(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "6px 8px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  fontSize: "0.85rem",
+                }}
+              />
+              <button onClick={addSubtask} className="icon-button" title="Add">
+                <PlusIcon className="action-icon" />
+              </button>
+            </div>
           </div>
         )}
-
-        {/* Removed redundant progress display logic */}
       </div>
     );
   }
 );
 
-// The Main App Component
+// --- Main App Component ---
 export const App = () => {
   const [tasks, setTasks] = useState({});
   const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // --- 1. Firebase Initialization and Authentication (Kept as is) ---
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTargetLane, setModalTargetLane] = useState("todo");
+
+  // --- Firebase Init ---
   useEffect(() => {
     const firebaseConfig = getFirebaseConfig();
     if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-      console.error("Firebase config is missing. Cannot initialize app.");
+      console.error("Firebase config missing.");
       setIsAuthReady(true);
       return;
     }
@@ -520,7 +698,6 @@ export const App = () => {
     const firebaseAuth = getAuth(app);
 
     setDb(firestore);
-    setAuth(firebaseAuth);
 
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
       if (!user) {
@@ -531,7 +708,7 @@ export const App = () => {
             await signInAnonymously(firebaseAuth);
           }
         } catch (error) {
-          console.error("Auth sign-in failed:", error);
+          console.error("Auth failed:", error);
         }
       }
       setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
@@ -541,11 +718,10 @@ export const App = () => {
     return () => unsubscribeAuth();
   }, []);
 
-  // --- 2. Real-time Firestore Listener (Kept as is) ---
+  // --- Real-time Listener ---
   useEffect(() => {
     if (!db || !isAuthReady) return;
 
-    // Use simplified, valid path: artifacts/{appId}/kanban_tasks (3 segments)
     const taskCollectionRef = collection(db, TASK_COLLECTION_PATH);
 
     const unsubscribeSnapshot = onSnapshot(
@@ -553,62 +729,60 @@ export const App = () => {
       (snapshot) => {
         const newTasks = {};
         snapshot.forEach((doc) => {
-          const data = doc.data();
-          newTasks[doc.id] = { id: doc.id, ...data };
+          newTasks[doc.id] = { id: doc.id, ...doc.data() };
         });
         setTasks(newTasks);
-        // console.log("Tasks updated from Firestore.");
       },
-      (error) => {
-        console.error("Error listening to Firestore:", error);
-      }
+      (error) => console.error("Firestore Error:", error)
     );
 
     return () => unsubscribeSnapshot();
   }, [db, isAuthReady]);
 
-  // --- 3. CRUD Operations (Connected to Firestore - Kept as is) ---
+  // --- CRUD Operations ---
+  const handleAddNewTask = async (taskData) => {
+    if (!db) return;
 
-  const addTask = useCallback(
-    async (columnId) => {
-      if (!db) return;
+    // Calculate initial progress based on subtasks
+    const subtasks = taskData.subtasks || [];
+    let progress = 0;
+    if (taskData.status === "done") {
+      progress = 100;
+    } else if (subtasks.length > 0) {
+      const doneCount = subtasks.filter((s) => s.done).length;
+      progress = Math.round((doneCount / subtasks.length) * 100);
+    }
 
-      // Prompt for a task title
-      const title = prompt(`Enter task title for column '${columnId}':`);
-      if (!title || !title.trim()) return;
+    const newTask = {
+      title: taskData.title,
+      description: taskData.description,
+      priority: taskData.priority,
+      status: taskData.status,
+      subtasks: subtasks,
+      progress: progress,
+      timestamp: Date.now(),
+      ownerId: userId,
+    };
 
-      const newTask = {
-        title: title.trim(),
-        status: columnId,
-        progress: columnId === "done" ? 100 : 0,
-        subtasks: [],
-        timestamp: Date.now(),
-        ownerId: userId,
-      };
-
-      try {
-        // Use timestamp as the explicit document ID for ordering
-        const newDocRef = doc(
-          collection(db, TASK_COLLECTION_PATH),
-          String(newTask.timestamp)
-        );
-        await setDoc(newDocRef, newTask);
-      } catch (error) {
-        console.error("Error adding document: ", error);
-      }
-    },
-    [db, userId]
-  );
+    try {
+      const newDocRef = doc(
+        collection(db, TASK_COLLECTION_PATH),
+        String(newTask.timestamp)
+      );
+      await setDoc(newDocRef, newTask);
+    } catch (error) {
+      console.error("Error adding task:", error);
+    }
+  };
 
   const updateTask = useCallback(
     async (taskId, updateData) => {
       if (!db || !taskId) return;
-
       const taskDocRef = doc(db, TASK_COLLECTION_PATH, taskId);
       try {
         await updateDoc(taskDocRef, updateData);
       } catch (error) {
-        console.error("Error updating document: ", error);
+        console.error("Error updating:", error);
       }
     },
     [db]
@@ -617,41 +791,20 @@ export const App = () => {
   const handleDeleteTask = useCallback(
     async (taskId) => {
       if (!db || !taskId) return;
-
       const taskDocRef = doc(db, TASK_COLLECTION_PATH, taskId);
       try {
         await deleteDoc(taskDocRef);
       } catch (error) {
-        console.error("Error deleting document: ", error);
+        console.error("Error deleting:", error);
       }
     },
     [db]
   );
 
-  const handleProgressChange = useCallback(
-    (taskId, newProgress) => {
-      // This is only called when using the slider (1% to 99%), so status is always 'in-progress'
-      updateTask(taskId, {
-        progress: newProgress,
-        status: "in-progress",
-      });
-    },
-    [updateTask]
-  );
-
-  // --- 4. Drag and Drop Logic (Kept as is) ---
-
+  // Drag and Drop
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("taskId", taskId);
     e.currentTarget.classList.add("is-dragging");
-  };
-
-  const floatingAdd = () => {
-    const col = prompt(
-      "Enter column (todo, in-progress, done) or leave blank for To Do:"
-    );
-    const columnId = col && col.trim() ? col.trim() : "todo";
-    addTask(columnId);
   };
 
   const handleDragOver = (e) => {
@@ -673,31 +826,21 @@ export const App = () => {
 
     e.target.closest(".task-card")?.classList.remove("is-dragging");
 
-    // Determine progress based on the new status
     let newProgress;
-    if (newStatus === "todo") {
-      newProgress = 0;
-    } else if (newStatus === "done") {
-      newProgress = 100;
-    } else {
-      // 'in-progress'
-      // Retain progress if task was already in progress, otherwise default to 1 (min for slider)
+    if (newStatus === "todo") newProgress = 0;
+    else if (newStatus === "done") newProgress = 100;
+    else {
       newProgress =
-        task.status === "in-progress" &&
-        task.progress > 0 &&
-        task.progress < 100
-          ? task.progress
-          : 1;
+        task.status === "in-progress" && task.progress > 0 ? task.progress : 1;
     }
 
-    // Update the task in Firestore
     await updateTask(taskId, {
       status: newStatus,
       progress: newProgress,
     });
   };
 
-  // --- 5. Data Grouping and Memoization (Kept as is) ---
+  // Grouping
   const groupedTasks = useMemo(() => {
     return Object.values(tasks).reduce(
       (acc, task) => {
@@ -710,7 +853,6 @@ export const App = () => {
   }, [tasks]);
 
   const sortedGroupedTasks = useMemo(() => {
-    // Sort within each group by timestamp (oldest created at the top)
     return Object.keys(groupedTasks).reduce((acc, status) => {
       acc[status] = groupedTasks[status].sort(
         (a, b) => a.timestamp - b.timestamp
@@ -719,46 +861,41 @@ export const App = () => {
     }, {});
   }, [groupedTasks]);
 
-  // --- Render Logic ---
-
-  if (!isAuthReady) {
-    return (
-      <div className="p-8 text-center text-gray-600">
-        Loading Application and Syncing Data...
-      </div>
-    );
-  }
-
-  const currentUserIdDisplay = userId
-    ? `${userId.substring(0, 4)}...${userId.substring(userId.length - 4)}`
-    : "Guest";
-
-  // Overall progress across all tasks (based on finished tasks)
+  // Progress Calculation
   const allTasksArray = Object.values(tasks || {});
   const totalTasksCount = allTasksArray.length;
   const finishedTasksCount = allTasksArray.filter((t) => {
     if (!t) return false;
-    // Task is considered finished if status is 'done' OR all subtasks are done
     if (t.status === "done") return true;
     if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-      return t.subtasks.filter((s) => s.done).length === t.subtasks.length;
+      return t.subtasks.every((s) => s.done);
     }
-    // For tasks without subtasks, only 100% progress counts as finished
     return t.progress === 100;
   }).length;
+
   const overallPercent = totalTasksCount
     ? Math.round((finishedTasksCount / totalTasksCount) * 100)
     : 0;
 
+  if (!isAuthReady) {
+    return (
+      <div className="p-8 text-center text-gray-400">Loading Dashboard...</div>
+    );
+  }
+
+  const openAddModal = (lane = "todo") => {
+    setModalTargetLane(lane);
+    setIsModalOpen(true);
+  };
+
   return (
     <div className="app">
-      {/* Top Bar/Header - Adjusted to match the design's minimal header and title */}
       <header
         style={{
-          padding: "2.5rem 2rem 0 2rem", // Match column padding
+          padding: "2.5rem 2rem 0 2rem",
           maxWidth: "1200px",
           margin: "0 auto",
-          color: "#eaf0fa", // Match body text color
+          color: "#eaf0fa",
         }}
       >
         <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0 }}>
@@ -776,7 +913,6 @@ export const App = () => {
         </p>
       </header>
 
-      {/* Overall progress bar */}
       <OverallProgressBar
         overallPercent={overallPercent}
         finishedTasksCount={finishedTasksCount}
@@ -792,19 +928,15 @@ export const App = () => {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, column.id)}
           >
-            {/* Column Header - Styled to match the design's card-like header with progress gradient */}
             <div
               className="column-header"
               style={{
-                // Gradient background for the header title bar
                 background:
                   column.id === "todo"
-                    ? "linear-gradient(90deg, rgba(163, 173, 194, 0.05), transparent)" // Muted/Gray for To Do
+                    ? "linear-gradient(90deg, rgba(163, 173, 194, 0.05), transparent)"
                     : column.id === "in-progress"
-                    ? "linear-gradient(90deg, rgba(124, 58, 237, 0.1), transparent)" // Accent/Purple for In Progress
-                    : "linear-gradient(90deg, rgba(6, 182, 212, 0.1), transparent)", // Success/Cyan for Done
-
-                // Added a progress bar style to the header
+                    ? "linear-gradient(90deg, rgba(124, 58, 237, 0.1), transparent)"
+                    : "linear-gradient(90deg, rgba(6, 182, 212, 0.1), transparent)",
                 borderBottom: "4px solid",
                 borderImage:
                   column.id === "todo"
@@ -812,8 +944,8 @@ export const App = () => {
                     : column.id === "in-progress"
                     ? "linear-gradient(90deg, #7c3aed, #06b6d4) 1"
                     : "linear-gradient(90deg, #06b6d4, #10b981) 1",
-                padding: "16px 20px", // Slightly more padding
-                marginBottom: "12px", // Space between header and first card
+                padding: "16px 20px",
+                marginBottom: "12px",
               }}
             >
               <span className="column-title" style={{ fontSize: "1.25rem" }}>
@@ -824,11 +956,11 @@ export const App = () => {
               </span>
               <button
                 className="icon-button"
-                onClick={() => addTask(column.id)}
+                onClick={() => openAddModal(column.id)}
                 title={`Add task to ${column.title}`}
                 style={{ background: "none", border: "none" }}
               >
-                <img src={plusSvgImg} alt="add" className="action-img" />
+                <PlusIcon className="action-icon" />
               </button>
             </div>
 
@@ -837,36 +969,46 @@ export const App = () => {
                 <TaskCard
                   key={task.id}
                   task={task}
-                  db={db}
-                  userId={userId}
                   onDragStart={handleDragStart}
-                  handleProgressChange={handleProgressChange}
                   handleDeleteTask={handleDeleteTask}
                   updateTask={updateTask}
                 />
               ))}
-              {/* Drop Target Placeholder for Empty Columns (Styled for dark theme) */}
               {sortedGroupedTasks[column.id]?.length === 0 && (
                 <div
-                  className="p-4 rounded-md"
                   style={{
+                    padding: "2rem",
                     textAlign: "center",
                     color: "var(--muted)",
                     border: "1px dashed rgba(255, 255, 255, 0.1)",
+                    borderRadius: 8,
                     backgroundColor: "rgba(255, 255, 255, 0.02)",
                   }}
                 >
-                  Drop tasks here or click '+' to create one.
+                  Drop tasks here
                 </div>
               )}
             </div>
           </div>
         ))}
       </main>
-      {/* Floating Add Task Button (Kept as is) */}
-      <button className="floating-add" onClick={floatingAdd} title="Add Task">
-        <img src={plusSvgImg} alt="add" />
+
+      {/* Floating Add Task Button with Animation Class */}
+      <button
+        className="floating-add"
+        onClick={() => openAddModal()}
+        title="Add Task"
+      >
+        <PlusIcon size={26} />
       </button>
+
+      {/* New Task Modal */}
+      <NewTaskModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleAddNewTask}
+        initialLane={modalTargetLane}
+      />
     </div>
   );
 };
