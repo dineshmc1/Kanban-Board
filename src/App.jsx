@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+// Import Icons - Note: I'm keeping the original imports but will recommend the ones to use later
 import stopIcon from "./assets/stop.svg";
 import percentageIcon from "./assets/percentage.svg";
-import dotsIcon from "./assets/dots.svg";
-import checkedIconImg from "./assets/checked.svg";
-import wipIconImg from "./assets/work-in-progress.svg";
-import dryCleanIcon from "./assets/dry-clean.svg";
-import menuIcon from "./assets/menu-bar.svg";
-import trashIconImg from "./assets/trash-can.svg";
-import plusSvgImg from "./assets/plus.svg";
-import reactLogoImg from "./assets/react.svg";
+import dotsIcon from "./assets/dots.svg"; // Drag Handle
+import checkedIconImg from "./assets/checked.svg"; // Done Status
+import wipIconImg from "./assets/work-in-progress.svg"; // In Progress Status
+import dryCleanIcon from "./assets/dry-clean.svg"; // To Do Status
+import menuIcon from "./assets/menu-bar.svg"; // Menu/More icon
+import trashIconImg from "./assets/trash-can.svg"; // Delete icon
+import plusSvgImg from "./assets/plus.svg"; // Plus icon
+import reactLogoImg from "./assets/react.svg"; // Tech badge
 
-// --- Firebase Imports (required for persistent, real-time storage) ---
+// --- Firebase Imports ---
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -28,7 +29,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 
-// --- Icon Components (Inline SVG to bypass file resolution issues) ---
+// --- Icon Components (Inline SVG - Kept for compatibility) ---
 
 const Icon = ({ size = "1em", strokeWidth = 2, children, ...props }) => (
   <svg
@@ -119,6 +120,84 @@ const initialAuthToken =
   typeof __initial_auth_token !== "undefined" ? __initial_auth_token : null;
 const TASK_COLLECTION_PATH = `artifacts/${appId}/kanban_tasks`;
 
+// --- NEW Component for Overall Progress Bar ---
+const OverallProgressBar = ({
+  overallPercent,
+  finishedTasksCount,
+  totalTasksCount,
+}) => {
+  // Determine the color gradient based on the column colors in index.css
+  const gradient =
+    "linear-gradient(90deg, var(--accent-solid), var(--success))";
+
+  return (
+    <div
+      className="overall-progress-bar"
+      style={{
+        maxWidth: "1200px",
+        margin: "0 auto 2.5rem auto", // Added bottom margin to separate from columns
+        padding: "0 2rem", // Match board-container padding on sides
+      }}
+    >
+      <div
+        style={{
+          background: "var(--glass-2)", // Use a darker background for this section
+          padding: "20px 24px",
+          borderRadius: "var(--radius-lg)",
+          border: "1.5px solid var(--card-border)",
+          backdropFilter: "blur(8px) saturate(120%)",
+          boxShadow: "var(--glass-shadow)",
+        }}
+      >
+        <h2
+          style={{ fontSize: "1.25rem", fontWeight: 600, margin: "0 0 10px 0" }}
+        >
+          Overall Progress
+        </h2>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span
+            style={{ color: "var(--muted)", fontSize: "var(--font-size-md)" }}
+          >
+            {finishedTasksCount} of {totalTasksCount} tasks completed
+          </span>
+          <span
+            style={{
+              fontSize: "var(--font-size-lg)",
+              fontWeight: 700,
+              color: "#fff", // White color for the percentage score
+            }}
+          >
+            {overallPercent}%
+          </span>
+        </div>
+        {/* Visual Progress Bar (based on subtask-progress styles) */}
+        <div style={{ marginTop: 12 }}>
+          <div
+            className="subtask-progress"
+            style={{ height: "10px", background: "rgba(255, 255, 255, 0.1)" }}
+          >
+            <div
+              className="fill"
+              style={{
+                height: "100%",
+                background: gradient, // Use the accent gradient
+                width: `${overallPercent}%`,
+                borderRadius: "inherit",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // The Task Card Component
 const TaskCard = React.memo(
   ({
@@ -150,11 +229,7 @@ const TaskCard = React.memo(
       : task.progress || 0;
 
     // Determine the progress bar fill color
-    const progressColor = isDone
-      ? "#10b981"
-      : task.progress > 0
-      ? "#4f46e5"
-      : "#e5e7eb";
+    // Use CSS variables for a consistent look
 
     const handleUpdateProgress = useCallback(
       (e) => {
@@ -184,13 +259,17 @@ const TaskCard = React.memo(
       const updated = Array.isArray(task.subtasks)
         ? [...task.subtasks, newSubtask]
         : [newSubtask];
+      const doneCount = updated.filter((s) => s.done).length;
+      const newProgress = Math.round((doneCount / updated.length) * 100);
+
+      // Check if status needs to be updated. If subtasks are added, it should minimally be 'in-progress'
+      const newStatus =
+        newProgress === 100 ? "done" : newProgress > 0 ? "in-progress" : "todo";
+
       await updateTask(task.id, {
         subtasks: updated,
-        // set status to in-progress if we add subtasks
-        status: task.status === "done" ? "done" : "in-progress",
-        progress: Math.round(
-          (updated.filter((s) => s.done).length / updated.length) * 100
-        ),
+        status: newStatus,
+        progress: newProgress,
       });
       setNewSubtaskTitle("");
       setIsExpanded(true);
@@ -217,8 +296,6 @@ const TaskCard = React.memo(
 
     // Custom message box logic (replaces window.confirm)
     const handleDeleteClick = () => {
-      // In a production app, this would show a proper modal.
-      // For this environment, we use a simple console prompt as a safeguard against accidental deletion.
       const confirmDelete = prompt(
         `Type "DELETE" to confirm deletion of task: "${task.title}"`
       );
@@ -234,23 +311,15 @@ const TaskCard = React.memo(
         onDragStart={handleDragStart}
         id={`task-${task.id}`}
       >
-        <div className="flex-row">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img
-              src={dotsIcon}
-              alt="drag"
-              className="drag-handle-img"
-              draggable
-              title="Drag"
-            />
-            <div>
-              <h3 className="task-card-title">{task.title}</h3>
-              {task.description && (
-                <div className="task-card-desc">{task.description}</div>
-              )}
-            </div>
-          </div>
-
+        {/* Title and Priority/Tech Badge */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+          }}
+        >
+          <h3 className="task-card-title">{task.title}</h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {task.isTech && (
               <img
@@ -276,71 +345,76 @@ const TaskCard = React.memo(
           </div>
         </div>
 
-        <div className="task-status-bar">
-          {/* Status Icon */}
-          <div className="flex items-center" style={{ gap: 8 }}>
-            {isDone && (
-              <img src={checkedIconImg} alt="done" className="status-icon" />
-            )}
-            {isProgress && !isDone && (
-              <img src={wipIconImg} alt="wip" className="status-icon" />
-            )}
-            {!isProgress && !isDone && (
-              <img src={dryCleanIcon} alt="todo" className="status-icon" />
-            )}
-          </div>
+        {/* Description (Moved below title) */}
+        {task.description && (
+          <div className="task-card-desc">{task.description}</div>
+        )}
 
-          {/* Progress Slider (Only for In Progress and no subtasks) */}
-          <div className="progress-slider-container">
-            {isProgress && !hasSubtasks ? (
-              <input
-                type="range"
-                min="1"
-                max="99"
-                value={progressPercentage}
-                onChange={handleUpdateProgress}
-                style={{
-                  background: `linear-gradient(to right, ${progressColor} ${progressPercentage}%, rgba(255,255,255,0.06) ${progressPercentage}%)`,
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  height: "6px",
-                  borderRadius: "3px",
-                  backgroundColor: progressColor,
-                }}
-              />
-            )}
-          </div>
+        {/* Subtask Progress Bar (always visible at bottom) */}
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {/* Subtask Count */}
+          {hasSubtasks && (
+            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+              Subtask: {subtaskDoneCount}/{task.subtasks.length}
+            </span>
+          )}
 
-          {/* Percentage Score */}
+          {/* Progress Percentage - Moved to the right of the bar in the design */}
           <span
             className="percentage-score"
-            style={{ color: isDone ? "#10b981" : "#4f46e5" }}
+            style={{
+              color: isDone ? "var(--success)" : "var(--accent-solid)", // Matching the design's colors
+              fontSize: "0.85rem",
+              fontWeight: 600,
+            }}
           >
             {progressPercentage}%
           </span>
         </div>
 
-        {/* Actions: Expand / Delete / Menu */}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            className="icon-button"
-            onClick={toggleExpand}
-            title={isExpanded ? "Collapse" : "Expand"}
-          >
-            {isExpanded ? (
-              <span style={{ fontSize: "0.9rem" }}>▾</span>
-            ) : (
-              <span style={{ fontSize: "0.9rem" }}>▸</span>
-            )}
-          </button>
+        {/* Visual Progress Bar - Bottom of card */}
+        <div className="subtask-progress">
+          <div
+            className="fill"
+            style={{
+              width: `${progressPercentage}%`,
+              // Use the accent gradient for progress bar fill, if not 100% done
+              background: isDone ? "var(--success)" : "var(--accent)",
+            }}
+          />
+        </div>
 
+        {/* Card Actions (Drag Handle, Menu, Delete) - Aligned to bottom right */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          {/* Drag Handle */}
+          <img
+            src={dotsIcon}
+            alt="drag"
+            className="drag-handle-img"
+            draggable
+            title="Drag"
+          />
+
+          {/* Menu Button (dots) */}
           <button className="icon-button" onClick={() => {}} title="More">
             <img src={menuIcon} alt="menu" className="action-img" />
           </button>
 
+          {/* Trash Button */}
           <button
             className="icon-button"
             onClick={handleDeleteClick}
@@ -350,7 +424,7 @@ const TaskCard = React.memo(
           </button>
         </div>
 
-        {/* Subtasks Panel */}
+        {/* Subtasks Panel (Expanded View - Kept functionality) */}
         {isExpanded && (
           <div className="subtasks-panel" style={{ marginTop: 8 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -365,6 +439,7 @@ const TaskCard = React.memo(
                   border: "1px solid rgba(255,255,255,0.04)",
                   background: "transparent",
                   color: "inherit",
+                  fontSize: "var(--font-size-sm)",
                 }}
               />
               <button
@@ -386,6 +461,7 @@ const TaskCard = React.memo(
                     alignItems: "center",
                     gap: 8,
                     padding: "6px 0",
+                    fontSize: "var(--font-size-sm)",
                   }}
                 >
                   <label
@@ -409,24 +485,14 @@ const TaskCard = React.memo(
                       {s.title}
                     </span>
                   </label>
-                  {s.done && (
-                    <img
-                      src={stopIcon}
-                      alt="done"
-                      style={{ width: 18, height: 18 }}
-                    />
-                  )}
+                  {/* Icon for completed subtask - removed as it clutters the subtask list */}
                 </div>
               ))}
             </div>
           </div>
         )}
-        {/* Subtask progress bar (visual) */}
-        <div style={{ marginTop: 6 }}>
-          <div className="subtask-progress">
-            <div className="fill" style={{ width: `${progressPercentage}%` }} />
-          </div>
-        </div>
+
+        {/* Removed redundant progress display logic */}
       </div>
     );
   }
@@ -440,7 +506,7 @@ export const App = () => {
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // --- 1. Firebase Initialization and Authentication ---
+  // --- 1. Firebase Initialization and Authentication (Kept as is) ---
   useEffect(() => {
     const firebaseConfig = getFirebaseConfig();
     if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
@@ -475,7 +541,7 @@ export const App = () => {
     return () => unsubscribeAuth();
   }, []);
 
-  // --- 2. Real-time Firestore Listener ---
+  // --- 2. Real-time Firestore Listener (Kept as is) ---
   useEffect(() => {
     if (!db || !isAuthReady) return;
 
@@ -501,7 +567,7 @@ export const App = () => {
     return () => unsubscribeSnapshot();
   }, [db, isAuthReady]);
 
-  // --- 3. CRUD Operations (Connected to Firestore) ---
+  // --- 3. CRUD Operations (Connected to Firestore - Kept as is) ---
 
   const addTask = useCallback(
     async (columnId) => {
@@ -573,7 +639,7 @@ export const App = () => {
     [updateTask]
   );
 
-  // --- 4. Drag and Drop Logic ---
+  // --- 4. Drag and Drop Logic (Kept as is) ---
 
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("taskId", taskId);
@@ -631,7 +697,7 @@ export const App = () => {
     });
   };
 
-  // --- 5. Data Grouping and Memoization ---
+  // --- 5. Data Grouping and Memoization (Kept as is) ---
   const groupedTasks = useMemo(() => {
     return Object.values(tasks).reduce(
       (acc, task) => {
@@ -672,10 +738,12 @@ export const App = () => {
   const totalTasksCount = allTasksArray.length;
   const finishedTasksCount = allTasksArray.filter((t) => {
     if (!t) return false;
+    // Task is considered finished if status is 'done' OR all subtasks are done
     if (t.status === "done") return true;
     if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
       return t.subtasks.filter((s) => s.done).length === t.subtasks.length;
     }
+    // For tasks without subtasks, only 100% progress counts as finished
     return t.progress === 100;
   }).length;
   const overallPercent = totalTasksCount
@@ -684,81 +752,36 @@ export const App = () => {
 
   return (
     <div className="app">
-      {/* Top Bar/Header (Minimalist) */}
-      <header className="px-4 py-3 border-b border-gray-200 bg-white shadow-sm">
-        <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <WipIcon size="1.5rem" className="text-indigo-600" />
-              Kanban Hub
-            </h1>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={overallPercent}
-                readOnly
-                disabled
-                style={{ width: 200 }}
-              />
-              <span style={{ fontSize: 12, color: "#374151" }}>
-                {overallPercent}%
-              </span>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <img
-                src={percentageIcon}
-                alt="percent"
-                style={{ width: 20, height: 20 }}
-              />
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={overallPercent}
-                readOnly
-                disabled
-                style={{ width: 180 }}
-              />
-              <span style={{ fontSize: 12, color: "#374151" }}>
-                {overallPercent}%
-              </span>
-            </div>
-
-            <span className="text-xs text-gray-500">
-              User: {currentUserIdDisplay} (Public Board)
-            </span>
-          </div>
-        </div>
+      {/* Top Bar/Header - Adjusted to match the design's minimal header and title */}
+      <header
+        style={{
+          padding: "2.5rem 2rem 0 2rem", // Match column padding
+          maxWidth: "1200px",
+          margin: "0 auto",
+          color: "#eaf0fa", // Match body text color
+        }}
+      >
+        <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0 }}>
+          Project Dashboard
+        </h1>
+        <p
+          style={{
+            color: "var(--muted)",
+            fontSize: "1rem",
+            marginTop: 4,
+            marginBottom: 0,
+          }}
+        >
+          Track and manage your tasks efficiently
+        </p>
       </header>
 
-      {/* Overall progress bar at top of tasks */}
-      <div
-        style={{ maxWidth: "1200px", margin: "12px auto", padding: "0 16px" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img
-            src={percentageIcon}
-            alt="percent"
-            style={{ width: 20, height: 20 }}
-          />
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={overallPercent}
-            readOnly
-            disabled
-            style={{ flex: 1 }}
-          />
-          <span style={{ width: 48, textAlign: "right" }}>
-            {overallPercent}%
-          </span>
-        </div>
-      </div>
+      {/* Overall progress bar */}
+      <OverallProgressBar
+        overallPercent={overallPercent}
+        finishedTasksCount={finishedTasksCount}
+        totalTasksCount={totalTasksCount}
+      />
 
       <main className="board-container">
         {COLUMNS.map((column) => (
@@ -769,8 +792,31 @@ export const App = () => {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, column.id)}
           >
-            <div className="column-header">
-              <span className="column-title">
+            {/* Column Header - Styled to match the design's card-like header with progress gradient */}
+            <div
+              className="column-header"
+              style={{
+                // Gradient background for the header title bar
+                background:
+                  column.id === "todo"
+                    ? "linear-gradient(90deg, rgba(163, 173, 194, 0.05), transparent)" // Muted/Gray for To Do
+                    : column.id === "in-progress"
+                    ? "linear-gradient(90deg, rgba(124, 58, 237, 0.1), transparent)" // Accent/Purple for In Progress
+                    : "linear-gradient(90deg, rgba(6, 182, 212, 0.1), transparent)", // Success/Cyan for Done
+
+                // Added a progress bar style to the header
+                borderBottom: "4px solid",
+                borderImage:
+                  column.id === "todo"
+                    ? "linear-gradient(90deg, #a3adc2, rgba(163, 173, 194, 0.2)) 1"
+                    : column.id === "in-progress"
+                    ? "linear-gradient(90deg, #7c3aed, #06b6d4) 1"
+                    : "linear-gradient(90deg, #06b6d4, #10b981) 1",
+                padding: "16px 20px", // Slightly more padding
+                marginBottom: "12px", // Space between header and first card
+              }}
+            >
+              <span className="column-title" style={{ fontSize: "1.25rem" }}>
                 {column.title}
                 <span className="task-count">
                   {sortedGroupedTasks[column.id]?.length || 0}
@@ -780,6 +826,7 @@ export const App = () => {
                 className="icon-button"
                 onClick={() => addTask(column.id)}
                 title={`Add task to ${column.title}`}
+                style={{ background: "none", border: "none" }}
               >
                 <img src={plusSvgImg} alt="add" className="action-img" />
               </button>
@@ -798,9 +845,17 @@ export const App = () => {
                   updateTask={updateTask}
                 />
               ))}
-              {/* Drop Target Placeholder for Empty Columns */}
+              {/* Drop Target Placeholder for Empty Columns (Styled for dark theme) */}
               {sortedGroupedTasks[column.id]?.length === 0 && (
-                <div className="text-center text-gray-400 p-4 border border-dashed border-gray-300 rounded-md">
+                <div
+                  className="p-4 rounded-md"
+                  style={{
+                    textAlign: "center",
+                    color: "var(--muted)",
+                    border: "1px dashed rgba(255, 255, 255, 0.1)",
+                    backgroundColor: "rgba(255, 255, 255, 0.02)",
+                  }}
+                >
                   Drop tasks here or click '+' to create one.
                 </div>
               )}
@@ -808,7 +863,7 @@ export const App = () => {
           </div>
         ))}
       </main>
-      {/* Floating Add Task Button */}
+      {/* Floating Add Task Button (Kept as is) */}
       <button className="floating-add" onClick={floatingAdd} title="Add Task">
         <img src={plusSvgImg} alt="add" />
       </button>
